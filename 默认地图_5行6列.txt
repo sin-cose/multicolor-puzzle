@@ -1,0 +1,10 @@
+地图名称：默认地图
+地图大小：6列 x 5行
+起点位置：上侧,3
+终点位置：右侧,3
+地图绘制：
+PPPPPP
+PPPPPP
+PPPPPP
+PPPPPP
+PPPRRR
