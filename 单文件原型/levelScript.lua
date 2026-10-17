@@ -23,11 +23,11 @@ local CONFIG = {
         portraitTraveler = 1073741865, -- 图片控件模板索引；模板内预先配置旅行者头像
         portraitAino = 1073741864,     -- 图片控件模板索引；模板内预先配置爱诺头像
         portraitIneffa = 1073741867,   -- 图片控件模板索引；模板内预先配置伊涅芙头像
+        portraitNpcOne = 1073741881,          -- 可选图片控件模板索引；场景1“一个人”的头像
+        portraitNpcTwo = 1073741882,          -- 可选图片控件模板索引；场景1“另一个人”的头像
         speakerText = 1073741869,      -- 文本框模板索引
         dialogueText = 1073741871,     -- 文本框模板索引
         advanceArea = 1073741873,      -- 光标检测区域模板索引
-        choiceUnderstoodButton = 1073741875, -- 预设按钮模板索引；按钮自身预设文字“那当然了”
-        choiceNotUnderstoodButton = 1073741878, -- 预设按钮模板索引；按钮自身预设文字“没”
     },
 }
 
@@ -43,16 +43,14 @@ local REQUIRED_TEMPLATE_KEYS = {
     "speakerText",
     "dialogueText",
     "advanceArea",
-    "choiceUnderstoodButton",
-    "choiceNotUnderstoodButton",
 }
 
 -- 02.剧情数据：表达（text）及角色表情参数（expression）集中存放。
 local STORY = {
     scene1 = {
         { speaker = "旅行者", portrait = "traveler", expression = "疑惑", text = "前面好像有什么人在说话" },
-        { speaker = "爱诺", portrait = "aino", expression = "期待", text = "我们等了这么久了，旅行者怎么还没来" },
-        { speaker = "伊涅芙", portrait = "ineffa", expression = "平静", text = "不要着急，这条路是前往至冬的必经之路。TA一定会来的。" },
+        { speaker = "一个人", portrait = "npcOne", expression = "期待", text = "我们等了这么久了，旅行者怎么还没来" },
+        { speaker = "另一个人", portrait = "npcTwo", expression = "平静", text = "不要着急，这条路是前往至冬的必经之路。TA一定会来的。" },
         { speaker = "旅行者", portrait = "traveler", expression = "熟悉", text = "声音好像有点熟悉，过去看看吧" },
     },
     scene2 = {
@@ -71,8 +69,8 @@ local STORY = {
         { speaker = "伊涅芙", portrait = "ineffa", expression = "困惑", text = "O-O？" },
         { speaker = "爱诺", portrait = "aino", expression = "介绍", text = "橙色砖是橘子味的，踩上去会使你闻起来很好吃！" },
         { speaker = "爱诺", portrait = "aino", expression = "介绍", text = "蓝砖是水，喜欢的话可以游过去" },
-        { speaker = "爱诺", portrait = "aino", expression = "警告", text = "但如果你闻起来像橘子，食人鱼会邀你。" },
-        { speaker = "爱诺", portrait = "aino", expression = "警告", text = "而且，如果蓝砖的旁边靠着黄砖" },
+        { speaker = "爱诺", portrait = "aino", expression = "警告", text = "但如果你闻起来像橘子，食人鱼会咬你。" },
+        { speaker = "爱诺", portrait = "aino", expression = "警告", text = "而且，如果蓝砖的旁边靠着黄砖，" },
         { speaker = "爱诺", portrait = "aino", expression = "警告", text = "跳进水里同样会触电！" },
         { speaker = "爱诺", portrait = "aino", expression = "介绍", text = "紫砖特别滑！你会滑向下一块砖！" },
         { speaker = "爱诺", portrait = "aino", expression = "介绍", text = "不过地板上滑溜溜的香皂闻起来像柠檬！" },
@@ -226,24 +224,56 @@ local function buildUI()
     local player = createControl("traveler", "Story_Traveler", 0, -height * 0.12, 88, 128, 0.5, 0.5)
     player:SetAsLastSibling()
 
-    local portraitTraveler = createControl("portraitTraveler", "Story_Portrait_Traveler", -width * 0.39, -height * 0.28, 130, 150, 0.5, 0.5)
-    local portraitAino = createControl("portraitAino", "Story_Portrait_Aino", -width * 0.39, -height * 0.28, 130, 150, 0.5, 0.5)
-    local portraitIneffa = createControl("portraitIneffa", "Story_Portrait_Ineffa", -width * 0.39, -height * 0.28, 130, 150, 0.5, 0.5)
+    -- 深色对话框位于头像、名字、台词和选项之下，贯穿整个对话区域。
+    local dialogueFrame = createControl("dialogueText", "Story_Dialogue_Frame", 0, -height * 0.295, width * 0.92, height * 0.40, 0.5, 0.5)
+    dialogueFrame.text = ""
+    dialogueFrame.bgColor = Color.FromRGBA(18, 18, 24, 235)
+    dialogueFrame:SetAsLastSibling()
+    setVisible(dialogueFrame, false)
+
+    local portraitTraveler = createControl("portraitTraveler", "Story_Portrait_Traveler", -width * 0.35, -height * 0.235, 120, 130, 0.5, 0.5)
+    local portraitAino = createControl("portraitAino", "Story_Portrait_Aino", -width * 0.35, -height * 0.235, 120, 130, 0.5, 0.5)
+    local portraitIneffa = createControl("portraitIneffa", "Story_Portrait_Ineffa", -width * 0.35, -height * 0.235, 120, 130, 0.5, 0.5)
     portraitTraveler:SetAsLastSibling()
     portraitAino:SetAsLastSibling()
     portraitIneffa:SetAsLastSibling()
+
+    local portraitNpcOne, portraitNpcTwo
+    if isPositiveInteger(CONFIG.templates.portraitNpcOne) then
+        portraitNpcOne = createControl("portraitNpcOne", "Story_Portrait_NPC_One", -width * 0.35, -height * 0.235, 120, 130, 0.5, 0.5)
+        portraitNpcOne:SetAsLastSibling()
+    else
+        log("未配置可选头像 portraitNpcOne；场景1‘一个人’将只显示名称")
+    end
+    if isPositiveInteger(CONFIG.templates.portraitNpcTwo) then
+        portraitNpcTwo = createControl("portraitNpcTwo", "Story_Portrait_NPC_Two", -width * 0.35, -height * 0.235, 120, 130, 0.5, 0.5)
+        portraitNpcTwo:SetAsLastSibling()
+    else
+        log("未配置可选头像 portraitNpcTwo；场景1‘另一个人’将只显示名称")
+    end
+
     setVisible(portraitTraveler, false)
     setVisible(portraitAino, false)
     setVisible(portraitIneffa, false)
+    setVisible(portraitNpcOne, false)
+    setVisible(portraitNpcTwo, false)
 
-    local speaker = createControl("speakerText", "Story_Speaker", -width * 0.24, -height * 0.23, width * 0.34, 42, 0.5, 0.5)
-    speaker.fontSize = 24
+    local speaker = createControl("speakerText", "Story_Speaker", -width * 0.35, -height * 0.37, width * 0.24, 36, 0.5, 0.5)
+    speaker.fontSize = 22
+    speaker.fontColor = Color.FromRGB(255, 255, 255)
+    speaker.bgColor = Color.FromRGBA(0, 0, 0, 0)
+    speaker.horizontalAlignment = Enum.TextHorizontalAlignment.Middle
+    speaker.verticalAlignment = Enum.TextVerticalAlignment.Middle
     speaker.text = ""
     speaker:SetAsLastSibling()
     setVisible(speaker, false)
 
-    local dialogue = createControl("dialogueText", "Story_Dialogue", 0, -height * 0.34, width * 0.78, height * 0.18, 0.5, 0.5)
-    dialogue.fontSize = 22
+    local dialogue = createControl("dialogueText", "Story_Dialogue", width * 0.105, -height * 0.285, width * 0.62, height * 0.22, 0.5, 0.5)
+    dialogue.fontSize = 30
+    dialogue.fontColor = Color.FromRGB(255, 255, 255)
+    dialogue.bgColor = Color.FromRGBA(0, 0, 0, 0)
+    dialogue.horizontalAlignment = Enum.TextHorizontalAlignment.Left
+    dialogue.verticalAlignment = Enum.TextVerticalAlignment.Middle
     dialogue.text = ""
     dialogue:SetAsLastSibling()
     setVisible(dialogue, false)
@@ -253,36 +283,65 @@ local function buildUI()
     advance:SetAsLastSibling()
     setVisible(advance, false)
 
-    local choice1 = createControl("choiceUnderstoodButton", "Story_Choice_1", -width * 0.20, -height * 0.43, width * 0.30, 56, 0.5, 0.5)
-    local choice2 = createControl("choiceNotUnderstoodButton", "Story_Choice_2", width * 0.20, -height * 0.43, width * 0.30, 56, 0.5, 0.5)
-    choice1.interactable, choice2.interactable = true, true
-    choice1:SetAsLastSibling()
-    choice2:SetAsLastSibling()
-    setVisible(choice1, false)
-    setVisible(choice2, false)
+    -- 选项用文本框绘制可见底色和文字，另用透明光标检测区域承接点击，
+    -- 不依赖预设按钮模板的图像/文字状态配置，也不需要按钮子控件。
+    local choice1Label = createControl("speakerText", "Story_Choice_1_Label", -width * 0.20, -height * 0.43, width * 0.30, 56, 0.5, 0.5)
+    local choice2Label = createControl("speakerText", "Story_Choice_2_Label", width * 0.20, -height * 0.43, width * 0.30, 56, 0.5, 0.5)
+    for _, label in ipairs({ choice1Label, choice2Label }) do
+        label.fontSize = 22
+        label.fontColor = Color.FromRGB(255, 255, 255)
+        label.bgColor = Color.FromRGBA(42, 42, 54, 235)
+        label.enableOutline = true
+        label.outlineColor = Color.FromRGB(0, 0, 0)
+        label.horizontalAlignment = Enum.TextHorizontalAlignment.Middle
+        label.verticalAlignment = Enum.TextVerticalAlignment.Middle
+    end
+    choice1Label.text = "那当然了"
+    choice2Label.text = "没"
+    choice1Label:SetAsLastSibling()
+    choice2Label:SetAsLastSibling()
+    setVisible(choice1Label, false)
+    setVisible(choice2Label, false)
+
+    local choice1Area = createControl("advanceArea", "Story_Choice_1_ClickArea", -width * 0.20, -height * 0.43, width * 0.30, 56, 0.5, 0.5)
+    local choice2Area = createControl("advanceArea", "Story_Choice_2_ClickArea", width * 0.20, -height * 0.43, width * 0.30, 56, 0.5, 0.5)
+    choice1Area.raycastTarget, choice2Area.raycastTarget = true, true
+    choice1Area:SetAsLastSibling()
+    choice2Area:SetAsLastSibling()
+    setVisible(choice1Area, false)
+    setVisible(choice2Area, false)
 
     RUNTIME.controls.background1 = background1
     RUNTIME.controls.background2 = background2
     RUNTIME.controls.player = player
+    RUNTIME.controls.dialogueFrame = dialogueFrame
     RUNTIME.controls.portraitTraveler = portraitTraveler
     RUNTIME.controls.portraitAino = portraitAino
     RUNTIME.controls.portraitIneffa = portraitIneffa
+    RUNTIME.controls.portraitNpcOne = portraitNpcOne
+    RUNTIME.controls.portraitNpcTwo = portraitNpcTwo
     RUNTIME.controls.speaker = speaker
     RUNTIME.controls.dialogue = dialogue
     RUNTIME.controls.advance = advance
-    RUNTIME.controls.choice1 = choice1
-    RUNTIME.controls.choice2 = choice2
+    RUNTIME.controls.choice1Label = choice1Label
+    RUNTIME.controls.choice2Label = choice2Label
+    RUNTIME.controls.choice1 = choice1Area
+    RUNTIME.controls.choice2 = choice2Area
     log("界面创建完成")
 end
 
 local function setPortraitFor(portraitKey)
-    -- 启动时一次性创建三名角色肖像；对话播放期间只切换显隐，不反复创建控件。
+    -- 对话播放期间只切换显隐，不反复创建角色肖像控件。
     setVisible(RUNTIME.controls.portraitTraveler, portraitKey == "traveler")
     setVisible(RUNTIME.controls.portraitAino, portraitKey == "aino")
     setVisible(RUNTIME.controls.portraitIneffa, portraitKey == "ineffa")
+    setVisible(RUNTIME.controls.portraitNpcOne, portraitKey == "npcOne")
+    setVisible(RUNTIME.controls.portraitNpcTwo, portraitKey == "npcTwo")
 end
 
 local function hideChoices()
+    setVisible(RUNTIME.controls.choice1Label, false)
+    setVisible(RUNTIME.controls.choice2Label, false)
     setVisible(RUNTIME.controls.choice1, false)
     setVisible(RUNTIME.controls.choice2, false)
     setVisible(RUNTIME.controls.advance, true)
@@ -296,11 +355,10 @@ local function showCurrentLine()
         RUNTIME.queue = nil
         RUNTIME.queueIndex = 0
         hideChoices()
+        setVisible(RUNTIME.controls.dialogueFrame, false)
         setVisible(RUNTIME.controls.speaker, false)
         setVisible(RUNTIME.controls.dialogue, false)
-        setVisible(RUNTIME.controls.portraitTraveler, false)
-        setVisible(RUNTIME.controls.portraitAino, false)
-        setVisible(RUNTIME.controls.portraitIneffa, false)
+        setPortraitFor(nil)
         setVisible(RUNTIME.controls.advance, false)
         RUNTIME.keyHeld.left, RUNTIME.keyHeld.right = false, false
         RUNTIME.keyHeld.up, RUNTIME.keyHeld.down = false, false
@@ -316,22 +374,22 @@ local function showCurrentLine()
 
     local line = RUNTIME.queue[RUNTIME.queueIndex]
     if line == nil then return end
+    setVisible(RUNTIME.controls.dialogueFrame, true)
     setPortraitFor(line.portrait)
     RUNTIME.controls.speaker.text = line.speaker
     RUNTIME.controls.dialogue.text = line.text
     setVisible(RUNTIME.controls.speaker, true)
     setVisible(RUNTIME.controls.dialogue, true)
-    setPortraitFor(line.portrait)
     log("对话行 " .. tostring(RUNTIME.queueIndex) .. ": " .. line.speaker .. " / 表情=" .. tostring(line.expression))
 
     if line.choices then
         RUNTIME.choosing = true
         setVisible(RUNTIME.controls.advance, false)
-        local buttons = { RUNTIME.controls.choice1, RUNTIME.controls.choice2 }
-        for i = 1, 2 do
-            setVisible(buttons[i], true)
-        end
-        log("显示选项按钮：那当然了 / 没；等待鼠标选择")
+        setVisible(RUNTIME.controls.choice1Label, true)
+        setVisible(RUNTIME.controls.choice2Label, true)
+        setVisible(RUNTIME.controls.choice1, true)
+        setVisible(RUNTIME.controls.choice2, true)
+        log("显示文本框选项：那当然了 / 没；等待鼠标选择")
     else
         hideChoices()
     end
