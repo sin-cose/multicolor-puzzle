@@ -301,6 +301,9 @@ local function buildUI()
     log("已连接像素角色容器：" .. CONFIG.travelerRootName .. "；由空.lua 绘制")
 
     createPuzzleBoard()
+    SCENE.BuildScene1(RUNTIME, CONFIG, createSceneRect)
+    setVisible(background1, false)
+    SCENE.SetScene1Visible(RUNTIME, true)
     player:SetAsLastSibling()
 
     -- 深色对话框位于头像、名字、台词和选项之下，贯穿整个对话区域。
@@ -532,6 +535,7 @@ local function enterScene2()
     RUNTIME.playerX = RUNTIME.canvasWidth * (scene.playerStartXRatio - 0.5)
     RUNTIME.playerY = RUNTIME.canvasHeight * (0.5 - scene.bridgeCenterYRatio)
     RUNTIME.controls.background1:SetVisible(false)
+    SCENE.SetScene1Visible(RUNTIME, false)
     RUNTIME.controls.background2:SetVisible(false)
     SCENE.SetVisible(RUNTIME, true)
     for _, tile in ipairs(RUNTIME.puzzleTiles) do tile:SetVisible(true) end

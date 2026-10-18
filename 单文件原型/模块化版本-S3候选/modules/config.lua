@@ -7,6 +7,13 @@ local CONFIG = {
     travelerRootSize = 256, -- 空.lua 使用 64×64 网格、每格 4 个 UI 单位
     scene1DialogueX = 0.78, -- 场景1行至屏幕宽度的78%时触发
     scene2DialogueX = 0.18, -- 场景2从左侧走至屏幕宽度的18%时触发
+    scene1 = {
+        roadCenterStartRatio = 0.5000,
+        roadCenterEndRatio = 0.4567,
+        roadHalfStartRatio = 0.2950,
+        roadHalfEndRatio = 0.1280,
+        roadTaperStartRatio = 0.7000,
+    },
     scene2 = {
         playerStartXRatio = 0.12,
         bridgeStartXRatio = 0.19,
