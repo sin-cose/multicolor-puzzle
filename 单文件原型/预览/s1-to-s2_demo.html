@@ -1,0 +1,172 @@
+<!doctype html>
+<!-- Design base: 1600x900, 16:9, AI-created from the supplied scene references.
+     Generated 2026-10-18 20:35 +08:00, v1. This is a development baseline, not the final deliverable. -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>彩砖谜题 · S1→S2 预览 v1</title>
+  <style>
+    :root { color-scheme: dark; --base-w:1600px; --base-h:900px; --ink:#f1f0e9; --muted:#b8b8b2; --line:#52565d; --panel:#191c21; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; padding:20px; display:grid; place-items:center; background:#111317; color:var(--ink); font:15px/1.45 system-ui,sans-serif; }
+    main { width:min(1280px,100%); }
+    header,.foot { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    header { margin:0 0 12px; }
+    h1 { margin:0; font-size:20px; }
+    header p,.foot { margin:4px 0 0; color:var(--muted); }
+    .stamp { border:1px solid var(--line); padding:5px 9px; color:#e7d38f; white-space:nowrap; }
+    .frame { padding:8px; background:#08090b; border:1px solid var(--line); }
+    #stage { position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; background:#050609; isolation:isolate; }
+    canvas { display:block; width:100%; height:100%; image-rendering:pixelated; }
+    .hud { position:absolute; inset:0; pointer-events:none; }
+    .status { position:absolute; left:2%; top:2%; padding:6px 10px; color:#fff; background:#18212be0; border:1px solid #d3d9df75; font-size:13px; }
+    .message { position:absolute; left:50%; top:14%; transform:translateX(-50%); padding:7px 12px; background:#18212be0; border:1px solid #d3d9df75; white-space:nowrap; font-size:14px; }
+    .pad { position:absolute; right:2%; bottom:3%; display:grid; grid-template:36px 36px / 36px 36px 36px; gap:3px; pointer-events:auto; }
+    .pad button,.restart,.guide-toggle { border:1px solid #a8abb0; background:#222831d9; color:#f5f2e9; cursor:pointer; }
+    .pad button { font-size:16px; }
+    .pad button[data-dir="up"] { grid-column:2; grid-row:1; }
+    .pad button[data-dir="left"] { grid-column:1; grid-row:2; }
+    .pad button[data-dir="down"] { grid-column:2; grid-row:2; }
+    .pad button[data-dir="right"] { grid-column:3; grid-row:2; }
+    .restart { pointer-events:auto; padding:6px 10px; }
+    .markers { position:absolute; inset:0; pointer-events:none; }
+    .measure { position:absolute; border:1px solid #ffffff38; opacity:.32; }
+    .guides { display:none; position:absolute; inset:0; pointer-events:none; background:linear-gradient(90deg,transparent 49.96%,#ffffff24 50%,transparent 50.04%),linear-gradient(0deg,transparent 49.94%,#ffffff24 50%,transparent 50.06%); }
+    #stage.show-guides .guides { display:block; }
+    .foot { margin-top:10px; flex-wrap:wrap; }
+    .tools { display:flex; align-items:center; gap:8px; }
+    .guide-toggle { padding:6px 10px; }
+    @media (max-width:650px) { body { padding:10px; } header { align-items:flex-start; flex-direction:column; gap:6px; } .pad { transform:scale(.8); transform-origin:bottom right; } .message { top:12%; font-size:12px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><h1>彩砖谜题 · 第一幕雪地悬崖路</h1><p>草石点缀路面，末段上下同步收束</p></div>
+      <span class="stamp">S1 画面 · v4 · 2026-10-18</span>
+    </header>
+    <div class="frame">
+      <section id="stage" aria-label="第一幕到第二幕场景预览">
+        <canvas id="world" width="1600" height="900" aria-label="雪林道路与桥梁谜题场景"></canvas>
+        <div class="markers" aria-hidden="true">
+          <i class="measure" data-anchor-id="forest-top" style="left:0%;top:0%;width:100%;height:34%"></i>
+          <i class="measure" data-anchor-id="forest-bottom" style="left:0%;top:72%;width:100%;height:28%"></i>
+          <i class="measure" data-anchor-id="snow-road" style="left:0%;top:34%;width:100%;height:48%"></i>
+          <i class="measure" data-anchor-id="funnel-mouth" style="left:72%;top:34%;width:25%;height:48%"></i>
+          <i class="measure" data-anchor-id="s2-gate" style="left:92%;top:37%;width:8%;height:20%"></i>
+        </div>
+        <div class="guides"></div>
+        <div class="hud">
+          <span class="status" id="status">S1 · 雪地悬崖路</span>
+          <span class="message" id="message">路面宽度对齐 S2；前方是深色崖面</span>
+        </div>
+      </section>
+    </div>
+    <div class="foot">
+      <span>本版只确认 S1 画面；人物移动、越界限制和 S2 衔接留到下一版。</span>
+      <span class="tools"><button class="guide-toggle" id="guides" type="button">布局参考线</button></span>
+    </div>
+  </main>
+  <script>
+    const BASE_W = 1600, BASE_H = 900;
+    const stage = document.getElementById('stage');
+    const canvas = document.getElementById('world');
+    const ctx = canvas.getContext('2d');
+
+    function rect(x,y,w,h,c) { ctx.fillStyle=c; ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h)); }
+    function poly(points,c) { ctx.fillStyle=c; ctx.beginPath(); ctx.moveTo(points[0][0],points[0][1]); for (let i=1;i<points.length;i++) ctx.lineTo(points[i][0],points[i][1]); ctx.closePath(); ctx.fill(); }
+    function line(points,c,w=1) { ctx.strokeStyle=c; ctx.lineWidth=w; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath(); ctx.moveTo(points[0][0],points[0][1]); for (let i=1;i<points.length;i++) ctx.lineTo(points[i][0],points[i][1]); ctx.stroke(); }
+    function roadCenter(x) { const t=Math.max(0,Math.min(1,(x-1120)/480)); return 450-39*t; }
+    function roadHalf(x) { const t=Math.max(0,Math.min(1,(x-1120)/480)); return 265.5-150.5*t; }
+
+    function drawGrass(x,y,s=1,flip=false) {
+      const dir=flip?-1:1;
+      // Small, desaturated tufts keep the road readable while breaking up the empty blue field.
+      line([[x,y+11*s],[x-7*s*dir,y-8*s],[x-3*s*dir,y+8*s]],'#647852',4*s);
+      line([[x+2*s*dir,y+11*s],[x+9*s*dir,y-11*s],[x+8*s*dir,y+8*s]],'#8ea26e',3*s);
+      line([[x+5*s*dir,y+11*s],[x+14*s*dir,y-4*s]],'#728a5a',2.5*s);
+    }
+
+    function drawStone(x,y,s=1) {
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.scale(s,s);
+      ctx.fillStyle='#53616a';
+      ctx.beginPath(); ctx.ellipse(1,11,19,5,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#697177';
+      ctx.beginPath();
+      ctx.moveTo(-16,7); ctx.lineTo(-11,-7); ctx.lineTo(1,-13); ctx.lineTo(15,-7);
+      ctx.lineTo(18,5); ctx.lineTo(8,12); ctx.lineTo(-7,13); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#9da4a5';
+      ctx.beginPath();
+      ctx.moveTo(-10,-6); ctx.lineTo(1,-11); ctx.lineTo(11,-6); ctx.lineTo(4,-1); ctx.lineTo(-6,1); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawRoadDecorations() {
+      // Fixed positions keep the scene stable across redraws and leave a clear central route.
+      const grass=[
+        [90,-128,1.02,false],[265,126,.86,true],[430,-156,1.10,false],[605,146,.82,true],
+        [790,-132,.94,false],[955,142,.84,true],[1100,-112,.86,false],[1285,90,.72,true],[1450,-76,.66,false]
+      ];
+      grass.forEach(([x,offset,s,flip])=>drawGrass(x,roadCenter(x)+offset,s,flip));
+      const stones=[
+        [170,-68,.82],[350,72,.92],[545,-42,.68],[720,96,.76],[875,-70,.86],
+        [1035,58,.72],[1205,-56,.66],[1370,48,.6],[1515,-34,.54]
+      ];
+      stones.forEach(([x,offset,s])=>drawStone(x,roadCenter(x)+offset,s));
+    }
+
+    function drawForest() {
+      rect(0,0,BASE_W,BASE_H,'#34373d');
+      rect(0,0,BASE_W,150,'#292c32');
+      rect(0,750,BASE_W,150,'#292c32');
+      for(let y=34;y<150;y+=38) rect(0,y,BASE_W,4,'#3f4248');
+      for(let y=770;y<900;y+=38) rect(0,y,BASE_W,4,'#3f4248');
+
+      const upper=[],lower=[];
+      for(let x=0;x<=BASE_W;x+=20){ const c=roadCenter(x),h=roadHalf(x); upper.push([x,c-h]); }
+      for(let x=BASE_W;x>=0;x-=20){ const c=roadCenter(x),h=roadHalf(x); lower.push([x,c+h]); }
+      poly([...upper,...lower],'#63666c');
+      const innerUpper=[],innerLower=[];
+      for(let x=0;x<=BASE_W;x+=20){ const c=roadCenter(x),h=roadHalf(x)-8; innerUpper.push([x,c-h]); }
+      for(let x=BASE_W;x>=0;x-=20){ const c=roadCenter(x),h=roadHalf(x)-8; innerLower.push([x,c+h]); }
+      poly([...innerUpper,...innerLower],'#81a3db');
+      const lineTop=[],lineBottom=[];
+      for(let x=0;x<=BASE_W;x+=16){ const c=roadCenter(x),h=roadHalf(x); lineTop.push([x,c-h]); }
+      for(let x=BASE_W;x>=0;x-=16){ const c=roadCenter(x),h=roadHalf(x); lineBottom.push([x,c+h]); }
+      poly([...lineTop,...lineBottom],'#8eacd9');
+      drawRoadDecorations();
+      // Foreground cliff face follows the lower road edge, using the same dark palette as S2.
+      const cliffFront=[];
+      for(let x=BASE_W;x>=0;x-=20){ const c=roadCenter(x),h=roadHalf(x); cliffFront.push([x,c+h]); }
+      for(let x=0;x<=BASE_W;x+=20){ const c=roadCenter(x),h=roadHalf(x); cliffFront.push([x,c+h+112]); }
+      poly(cliffFront,'#34373d');
+      const cliffLip=[];
+      for(let x=0;x<=BASE_W;x+=16){ const c=roadCenter(x),h=roadHalf(x); cliffLip.push([x,c+h]); }
+      for(let x=BASE_W;x>=0;x-=16){ const c=roadCenter(x),h=roadHalf(x); cliffLip.push([x,c+h+8]); }
+      poly(cliffLip,'#63666c');
+      for(let x=24;x<BASE_W;x+=92){
+        const c=roadCenter(x),h=roadHalf(x), y=c+h+28;
+        rect(x,y,48,5,'#292c32');
+        rect(x+22,y+28,36,4,'#3f4248');
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0,0,BASE_W,BASE_H);
+      drawForest();
+    }
+
+    document.getElementById('guides').addEventListener('click',()=>stage.classList.toggle('show-guides'));
+    window.__measure=function(){
+      const base=stage.getBoundingClientRect(), out=[];
+      document.querySelectorAll('[data-anchor-id]').forEach(el=>{const r=el.getBoundingClientRect();out.push({id:el.dataset.anchorId,leftPct:+((r.left-base.left)/base.width*100).toFixed(3),topPct:+((r.top-base.top)/base.height*100).toFixed(3),wPct:+(r.width/base.width*100).toFixed(3),hPct:+(r.height/base.height*100).toFixed(3),cxPct:+((r.left+r.width/2-base.left)/base.width*100).toFixed(3),cyPct:+((r.top+r.height/2-base.top)/base.height*100).toFixed(3),stretchX:el.dataset.stretchX==='true',stretchY:el.dataset.stretchY==='true'});});
+      document.title='MEASURE_READY'; console.log('MEASURE_RESULT '+JSON.stringify(out)); return JSON.stringify(out,null,2);
+    };
+    window.addEventListener('load',()=>window.__measure());
+    draw();
+  </script>
+</body>
+</html>
