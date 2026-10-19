@@ -52,15 +52,31 @@ local function samplePath(points, xRatio)
     return points[#points][2]
 end
 
+local function makeLinearPath(startX, endX, startY, endY, steps)
+    local points = {}
+    for index = 0, steps do
+        local t = index / steps
+        points[#points + 1] = {
+            startX + (endX - startX) * t,
+            startY + (endY - startY) * t,
+        }
+    end
+    return points
+end
+
 local function addScene1Band(runtime, createRect, prefix, startX, endX, topPath, bottomPath, color, segments)
     for index = 1, segments do
         local left = startX + (endX - startX) * (index - 1) / segments
         local right = startX + (endX - startX) * index / segments
-        local top = samplePath(topPath, (left + right) * 0.5)
-        local bottom = samplePath(bottomPath, (left + right) * 0.5)
+        local topLeft = samplePath(topPath, left)
+        local topRight = samplePath(topPath, right)
+        local bottomLeft = samplePath(bottomPath, left)
+        local bottomRight = samplePath(bottomPath, right)
+        local top = math.min(topLeft, topRight) - 0.001
+        local bottom = math.max(bottomLeft, bottomRight) + 0.001
         if bottom > top then
             addScene1Rect(runtime, createRect, prefix .. tostring(index), left, top,
-                right - left + 0.001, bottom - top, color)
+                right - left + 0.005, bottom - top, color)
         end
     end
 end
@@ -69,9 +85,9 @@ local function addScene1Edge(runtime, createRect, prefix, startX, endX, path, co
     for index = 1, segments do
         local left = startX + (endX - startX) * (index - 1) / segments
         local right = startX + (endX - startX) * index / segments
-        local y = samplePath(path, (left + right) * 0.5)
+        local y = math.min(samplePath(path, left), samplePath(path, right)) - 0.001
         addScene1Rect(runtime, createRect, prefix .. tostring(index), left, y,
-            right - left + 0.001, 0.006, color)
+            right - left + 0.001, 0.008, color)
     end
 end
 
@@ -107,56 +123,82 @@ end
 
 function Scene.BuildScene1(runtime, config, createRect)
     runtime.scene1Art = {}
-    local landTop = { { 0.025, 0.129 }, { 0.488, 0.129 }, { 0.651, 0.382 } }
-    local landBottom = { { 0.025, 0.817 }, { 0.506, 0.817 }, { 0.651, 0.556 } }
-    local clearingTop = {
-        { 0.025, 0.376 }, { 0.350, 0.376 }, { 0.390, 0.382 }, { 0.435, 0.388 },
-        { 0.470, 0.387 }, { 0.511, 0.391 }, { 0.561, 0.386 }, { 0.573, 0.401 },
-    }
-    local clearingBottom = {
-        { 0.025, 0.569 }, { 0.127, 0.573 }, { 0.217, 0.569 }, { 0.304, 0.574 },
-        { 0.390, 0.570 }, { 0.468, 0.572 }, { 0.538, 0.562 }, { 0.573, 0.547 },
-    }
-
     addScene1Rect(runtime, createRect, "S1_Abyss", 0, 0, 1, 1, COLORS.abyss)
 
-    -- Broad cliff face and the two-tone hanging blocks.
-    addScene1Rect(runtime, createRect, "S1_LowerCliffFace", 0.025, 0.817, 0.772, 0.105, COLORS.s1Cliff)
-    addScene1Rect(runtime, createRect, "S1_LowerCliffLip", 0.025, 0.817, 0.772, 0.006, COLORS.s1CliffLight)
-    local teeth = { 0.058, 0.145, 0.233, 0.323, 0.414, 0.505, 0.596, 0.691, 0.752 }
-    for index, left in ipairs(teeth) do
-        local width = index % 2 == 0 and 0.048 or 0.043
-        local top = index % 2 == 0 and 0.862 or 0.878
-        local height = index % 3 == 0 and 0.114 or 0.092
-        addScene1Rect(runtime, createRect, "S1_LowerCliffBlock_" .. tostring(index), left, top,
-            width, height, COLORS.s1CliffDark)
+    -- A single cliff face sits directly under the straight road, matching the
+    -- block structure used by the second scene.
+    addScene1Rect(runtime, createRect, "S1_UnderRoadCliffFace", 0, 0.817,
+        0.712375, 0.183, COLORS.s1Cliff)
+    addScene1Rect(runtime, createRect, "S1_UnderRoadCliffLip", 0, 0.817,
+        0.708, 0.008, COLORS.s1CliffLight)
+    local leftBlocks = { { 0.024, 0.883, 0.046, 0.100 }, { 0.095, 0.867, 0.050, 0.116 },
+        { 0.171, 0.883, 0.048, 0.100 } }
+    for index, block in ipairs(leftBlocks) do
+        addScene1Rect(runtime, createRect, "S1_LeftCliffBlock_" .. tostring(index),
+            block[1], block[2], block[3], block[4], COLORS.s1CliffDark)
     end
 
-    -- The sloped wall follows the land contour, preventing a black gap at the narrowing.
-    local sideTop = { { 0.506, 0.817 }, { 0.526, 0.793 }, { 0.562, 0.720 },
-        { 0.590, 0.656 }, { 0.618, 0.597 }, { 0.651, 0.556 }, { 0.694, 0.572 } }
-    addScene1Band(runtime, createRect, "S1_SlopeCliff_", 0.506, 0.694, sideTop,
-        { { 0.506, 1.0 }, { 0.694, 1.0 } }, COLORS.s1Cliff, 28)
-    addScene1Band(runtime, createRect, "S1_RightCliff_", 0.651, 0.797,
-        { { 0.651, 0.556 }, { 0.797, 0.556 } }, { { 0.651, 1.0 }, { 0.797, 1.0 } },
-        COLORS.s1Cliff, 18)
+    -- The left extension and straight road are one continuous surface.
+    -- The extra width intentionally overlaps the transition to hide hairline gaps.
+    addScene1Rect(runtime, createRect, "S1_MainLand", 0, 0.129,
+        0.712375, 0.688, COLORS.s1Land)
+    addScene1Edge(runtime, createRect, "S1_MainLandTopEdge", 0, 0.712375,
+        { { 0, 0.129 }, { 0.712375, 0.129 } }, COLORS.s1LandEdge, 1)
+    -- Match the transition endpoints to the two adjacent surfaces. This keeps
+    -- the arithmetic stair steps continuous without a second highlight at either end.
+    local transitionStart = 0.708
+    local transitionEnd = 0.852
+    local transitionSteps = 16
+    local landTop = makeLinearPath(transitionStart, transitionEnd, 0.129, 0.382, transitionSteps)
+    local landBottom = makeLinearPath(transitionStart, transitionEnd, 0.817, 0.556, transitionSteps)
+    addScene1Band(runtime, createRect, "S1_RoadTransition_", transitionStart, transitionEnd,
+        landTop, landBottom, COLORS.s1Land, 16)
+    addScene1Edge(runtime, createRect, "S1_RoadTransitionTopEdge_", transitionStart, transitionEnd,
+        landTop, COLORS.s1LandEdge, 16)
+    addScene1Rect(runtime, createRect, "S1_RearLand", transitionEnd, 0.382,
+        1 - transitionEnd, 0.187, COLORS.s1Land)
+    addScene1Rect(runtime, createRect, "S1_RearLandEdge", transitionEnd, 0.382,
+        1 - transitionEnd, 0.006, COLORS.s1LandEdge)
+    addScene1Rect(runtime, createRect, "S1_NarrowEndCliffFace", transitionEnd, 0.556,
+        1 - transitionEnd, 0.183, COLORS.s1Cliff)
+    addScene1Rect(runtime, createRect, "S1_NarrowEndCliffLip", transitionEnd, 0.556,
+        1 - transitionEnd, 0.008, COLORS.s1CliffLight)
 
-    -- Blue plateau and rear landing.
-    addScene1Band(runtime, createRect, "S1_Land_", 0.025, 0.651, landTop, landBottom, COLORS.s1Land, 40)
-    addScene1Rect(runtime, createRect, "S1_RearLand", 0.649, 0.382, 0.148, 0.187, COLORS.s1Land)
-    addScene1Edge(runtime, createRect, "S1_LandTopEdge_", 0.025, 0.488,
-        { { 0.025, 0.129 }, { 0.488, 0.129 } }, COLORS.s1LandEdge, 2)
-    addScene1Edge(runtime, createRect, "S1_LandBottomEdge_", 0.025, 0.506,
-        { { 0.025, 0.817 }, { 0.506, 0.817 } }, COLORS.s1LandEdge, 2)
-    addScene1Rect(runtime, createRect, "S1_RearLandEdge", 0.649, 0.382, 0.148, 0.006, COLORS.s1LandEdge)
+    -- Keep the whole small path in one control to remove the broken-up look.
+    addScene1Rect(runtime, createRect, "S1_ClearingSurface", 0, 0.376,
+        0.779625, 0.193, COLORS.s1Clearing)
+    addScene1Edge(runtime, createRect, "S1_ClearingTopEdge", 0, 0.779625,
+        { { 0, 0.376 }, { 0.779625, 0.376 } }, COLORS.s1ClearingEdge, 1)
+    addScene1Edge(runtime, createRect, "S1_ClearingBottomEdge", 0, 0.779625,
+        { { 0, 0.569 }, { 0.779625, 0.569 } }, COLORS.s1ClearingEdge, 1)
 
-    -- Large alternate-color clearing, clipped by its own top and bottom contours.
-    addScene1Band(runtime, createRect, "S1_Clearing_", 0.025, 0.573, clearingTop, clearingBottom,
-        COLORS.s1Clearing, 34)
-    addScene1Edge(runtime, createRect, "S1_ClearingTopEdge_", 0.025, 0.573, clearingTop,
-        COLORS.s1ClearingEdge, 34)
-    addScene1Edge(runtime, createRect, "S1_ClearingBottomEdge_", 0.025, 0.573, clearingBottom,
-        COLORS.s1ClearingEdge, 34)
+    -- The lower cliff follows the land's lower contour and stays parallel to it.
+    local cliffTop = { { 0.228125, 0.817 }, { transitionStart, 0.817 } }
+    local cliffTopTransition = makeLinearPath(transitionStart, transitionEnd,
+        0.817, 0.556, transitionSteps)
+    for index = 2, #cliffTopTransition do
+        cliffTop[#cliffTop + 1] = cliffTopTransition[index]
+    end
+    local cliffBottom = { { 0.228125, 1.0 }, { transitionStart, 1.0 } }
+    local cliffBottomTransition = makeLinearPath(transitionStart, transitionEnd,
+        1.0, 0.739, transitionSteps)
+    for index = 2, #cliffBottomTransition do
+        cliffBottom[#cliffBottom + 1] = cliffBottomTransition[index]
+    end
+    addScene1Band(runtime, createRect, "S1_LowerCliffTransition_", transitionStart, transitionEnd,
+        cliffTop, cliffBottom, COLORS.s1Cliff, 16)
+    addScene1Edge(runtime, createRect, "S1_LowerCliffTransitionLip_", transitionStart, transitionEnd,
+        cliffTop, COLORS.s1CliffLight, 16)
+    -- Blocks 10 and 11 are centered on the lower edge of the narrow-end
+    -- cliff face: 0.556 + 0.183 = 0.739.
+    local teeth = { { 0.256, 0.883, 0.045, 0.100 }, { 0.341, 0.867, 0.050, 0.116 },
+        { 0.430, 0.883, 0.049, 0.100 }, { 0.531, 0.871, 0.052, 0.109 },
+        { 0.632, 0.884, 0.050, 0.100 }, { 0.737, 0.871, 0.052, 0.109 },
+        { 0.842, 0.689, 0.050, 0.100 }, { 0.913, 0.6845, 0.052, 0.109 } }
+    for index, block in ipairs(teeth) do
+        addScene1Rect(runtime, createRect, "S1_LowerCliffBlock_" .. tostring(index),
+            block[1], block[2], block[3], block[4], COLORS.s1CliffDark)
+    end
 
     local specks = {
         { 0.065, 0.202, 1.0 }, { 0.149, 0.256, 0.72 }, { 0.235, 0.187, 0.82 },
@@ -170,11 +212,13 @@ function Scene.BuildScene1(runtime, config, createRect)
         addScene1Speck(runtime, createRect, index, item[1], item[2], item[3])
     end
 
-    addScene1Tree(runtime, createRect, 1, 0.444, 0.206, 1.28)
-    addScene1Tree(runtime, createRect, 2, 0.259, 0.206, 1.28)
-    addScene1Tree(runtime, createRect, 3, 0.199, 0.995, 0.66)
-    addScene1Tree(runtime, createRect, 4, 0.531, 0.995, 0.88)
-    addScene1Tree(runtime, createRect, 5, 0.625, 0.995, 0.70)
+    addScene1Tree(runtime, createRect, 1, 0.092, 0.206, 1.10)
+    addScene1Tree(runtime, createRect, 2, 0.277, 0.206, 1.15)
+    addScene1Tree(runtime, createRect, 3, 0.462, 0.206, 1.28)
+    addScene1Tree(runtime, createRect, 4, 0.647, 0.206, 1.28)
+    addScene1Tree(runtime, createRect, 5, 0.402, 1.0, 0.66)
+    addScene1Tree(runtime, createRect, 6, 0.734, 1.0, 0.88)
+    addScene1Tree(runtime, createRect, 7, 0.828, 1.0, 0.70)
 
     for _, control in ipairs(runtime.scene1Art) do control:SetVisible(false) end
 end
