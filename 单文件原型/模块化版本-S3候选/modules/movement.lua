@@ -1,6 +1,148 @@
 -- 角色移动与输入监听。共享运行状态由 levelScript.lua 持有并作为参数传入。
 local Movement = {}
 
+-- Scene geometry is authored in normalized canvas coordinates. Keep the
+-- player's center slightly inside each exposed edge so it cannot stand over
+-- the abyss; the narrow S2 bridge intentionally uses the same small inset.
+local WALKABLE_EDGE_MARGIN = 0.003
+local SCENE_TRANSITION_EDGE_GAP = 20
+
+local function insideRect(x, y, left, top, right, bottom, margin)
+    return x >= left + margin and x <= right - margin
+        and y >= top + margin and y <= bottom - margin
+end
+
+local function isScene1Walkable(x, y)
+    local margin = WALKABLE_EDGE_MARGIN
+
+    -- Main land and straight road: S1_MainLand in scene_s2.lua.
+    if insideRect(x, y, 0, 0.129, 0.712375, 0.817, margin) then return true end
+
+    -- The connecting road narrows along the same linear contours used by
+    -- S1_RoadTransition_*; its two endpoints meet the main and rear land.
+    if x >= 0.708 and x <= 0.852 then
+        local t = (x - 0.708) / (0.852 - 0.708)
+        local top = 0.129 + (0.382 - 0.129) * t
+        local bottom = 0.817 + (0.556 - 0.817) * t
+        if y >= top + margin and y <= bottom - margin then return true end
+    end
+
+    -- Rear landing and the broad clearing are separate visible walkable areas.
+    -- Do not inset the shared x edge: the transition road must meet this
+    -- platform without a margin-sized gap.
+    if x >= 0.852 and x <= 1 - margin
+        and y >= 0.382 + margin and y <= 0.569 - margin then return true end
+    if insideRect(x, y, 0, 0.376, 0.779625, 0.569, margin) then return true end
+    return false
+end
+
+local function isScene1FootprintWalkable(x, y, runtime, config)
+    -- Use a smaller support footprint in the narrow passage while still
+    -- checking its edges so the character does not stand over the cliff.
+    local supportSize = config.travelerRootSize * 0.25
+    local halfWidth = supportSize / runtime.canvasWidth
+    local halfHeight = supportSize / runtime.canvasHeight
+    if x + halfWidth < 0.852 - WALKABLE_EDGE_MARGIN then
+        return isScene1Walkable(x, y)
+    end
+
+    -- The rear landing is narrower than the other S1 surfaces. Keep the
+    -- character footprint over its connected land; cap the vertical support
+    -- inset to half the landing's half-height so the path remains traversable
+    -- at common UI canvas sizes.
+    if x + halfWidth >= 0.852 - WALKABLE_EDGE_MARGIN then
+        local landingHalfHeight = (0.569 - 0.382) * 0.5 - WALKABLE_EDGE_MARGIN
+        halfHeight = math.min(halfHeight, landingHalfHeight * 0.5)
+    end
+
+    for _, offsetX in ipairs({ -halfWidth, halfWidth }) do
+        for _, offsetY in ipairs({ -halfHeight, halfHeight }) do
+            if not isScene1Walkable(x + offsetX, y + offsetY) then return false end
+        end
+    end
+    return true
+end
+
+local function isScene2Walkable(x, y, config)
+    local margin = WALKABLE_EDGE_MARGIN
+    local scene = config.scene2
+    local bridgeHeight = scene.boardHeightRatio / config.puzzle.rows
+    local bridgeTop = scene.bridgeCenterYRatio - bridgeHeight * 0.5
+    local bridgeBottom = scene.bridgeCenterYRatio + bridgeHeight * 0.5
+
+    return insideRect(x, y, 0.04, 0.39, 0.20, 0.53, margin)
+        or insideRect(x, y, scene.bridgeStartXRatio, bridgeTop,
+            scene.bridgeStartXRatio + scene.bridgeWidthRatio, bridgeBottom, margin)
+        or insideRect(x, y, scene.boardLeftRatio, 0.20,
+            scene.boardLeftRatio + scene.boardWidthRatio, 0.79, margin)
+end
+
+local function isWalkable(runtime, config, x, y)
+    local ratioX = 0.5 + x / runtime.canvasWidth
+    local ratioY = 0.5 - y / runtime.canvasHeight
+    if runtime.scene == 1 then
+        return isScene1FootprintWalkable(ratioX, ratioY, runtime, config)
+    end
+    if runtime.scene == 2 then return isScene2Walkable(ratioX, ratioY, config) end
+    if runtime.scene == 3 then
+        -- S3 retains S2's land/bridge as its base terrain. The tile-row rule
+        -- applies only while the character is on the colored board itself.
+        local scene, puzzle = config.scene2, config.puzzle
+        local margin = WALKABLE_EDGE_MARGIN
+        local bridgeRight = scene.bridgeStartXRatio + scene.bridgeWidthRatio
+        local bridgeHeight = scene.boardHeightRatio / puzzle.rows
+        local bridgeTop = scene.bridgeCenterYRatio - bridgeHeight * 0.5
+        local bridgeBottom = scene.bridgeCenterYRatio + bridgeHeight * 0.5
+        local boardLeft = scene.boardLeftRatio
+
+        -- S2's independently inset bridge and board rectangles leave a tiny
+        -- gap at their shared edge. Stitch that seam only in S3 so the board
+        -- is reachable without changing S2's existing movement boundaries.
+        local onBridgeBoardSeam = math.abs(bridgeRight - boardLeft) <= margin * 2
+            and ratioX >= boardLeft - margin and ratioX <= boardLeft + margin
+            and ratioY >= bridgeTop + margin and ratioY <= bridgeBottom - margin
+        local onMainLand = insideRect(ratioX, ratioY,
+            scene.boardLeftRatio, scene.mainLandTopRatio,
+            scene.mainLandRightRatio, scene.mainLandBottomRatio, margin)
+        if not isScene2Walkable(ratioX, ratioY, config)
+            and not onBridgeBoardSeam and not onMainLand then
+            return false
+        end
+
+        local boardRight = scene.boardLeftRatio + scene.boardWidthRatio
+        if ratioX >= boardLeft + margin and ratioX <= boardRight - margin then
+            local tileHeight = scene.boardHeightRatio / puzzle.rows
+            -- The target is the full height of rows 3 and 4, not the
+            -- narrow band between their center lines.
+            local pinkRowsTop = scene.boardTopRatio + tileHeight * 2
+            local pinkRowsBottom = scene.boardTopRatio + tileHeight * 4
+            return ratioY >= pinkRowsTop and ratioY <= pinkRowsBottom
+        end
+        return true
+    end
+    return true
+end
+
+local function moveAcrossWalkableSurface(runtime, config, deltaX, deltaY)
+    local startX, startY = runtime.playerX, runtime.playerY
+    local largestRatioStep = math.max(
+        math.abs(deltaX) / runtime.canvasWidth,
+        math.abs(deltaY) / runtime.canvasHeight
+    )
+    -- Small samples prevent a fast frame from skipping across a narrow gap.
+    local samples = math.max(1, math.ceil(largestRatioStep / 0.005))
+    local lastX, lastY = startX, startY
+    for index = 1, samples do
+        local t = index / samples
+        local nextX = startX + deltaX * t
+        local nextY = startY + deltaY * t
+        if not isWalkable(runtime, config, nextX, nextY) then break end
+        lastX, lastY = nextX, nextY
+    end
+    runtime.playerX, runtime.playerY = lastX, lastY
+    return lastX ~= startX or lastY ~= startY
+end
+
 function Movement.GetBounds(runtime, config)
     local halfCharacter = config.travelerRootSize * 0.5
     local minX = -runtime.canvasWidth * 0.5 + halfCharacter + config.edgePadding
@@ -71,15 +213,13 @@ function Movement.Update(runtime, config, dt, handlers)
     local step = config.movementSpeed * math.min(dt, 0.05)
 
     if runtime.scene == 3 then
-        local topPinkRowCenter = runtime.puzzleBoardTop - runtime.puzzleTileHeight * 2.5
-        local bottomPinkRowCenter = runtime.puzzleBoardTop - runtime.puzzleTileHeight * 3.5
-        local halfCharacter = config.travelerRootSize * 0.5
-        runtime.playerX = math.max(runtime.puzzleBoardLeft - halfCharacter,
-            math.min(runtime.puzzleBoardRight + halfCharacter, runtime.playerX + xDirection * step))
-        runtime.playerY = math.max(bottomPinkRowCenter,
-            math.min(topPinkRowCenter, runtime.playerY + yDirection * step))
+        local minX, maxX, minY, maxY = Movement.GetBounds(runtime, config)
+        local nextX = math.max(minX, math.min(maxX, runtime.playerX + xDirection * step))
+        local nextY = math.max(minY, math.min(maxY, runtime.playerY + yDirection * step))
+        if not moveAcrossWalkableSurface(runtime, config,
+            nextX - runtime.playerX, nextY - runtime.playerY) then return end
         runtime.travelerRoot:SetAnchoredPosition(runtime.playerX, runtime.playerY)
-        if runtime.playerX >= runtime.puzzleBoardRight + halfCharacter then
+        if runtime.playerX >= runtime.puzzleBoardRight then
             runtime.movementLocked = true
             runtime.puzzlePhase = "passed"
             runtime.keyHeld.left, runtime.keyHeld.right = false, false
@@ -90,8 +230,17 @@ function Movement.Update(runtime, config, dt, handlers)
     end
 
     local minX, maxX, minY, maxY = Movement.GetBounds(runtime, config)
-    runtime.playerX = math.max(minX, math.min(maxX, runtime.playerX + xDirection * step))
-    runtime.playerY = math.max(minY, math.min(maxY, runtime.playerY + yDirection * step))
+    local movementMinX, movementMaxX = minX, maxX
+    local halfCharacter = config.travelerRootSize * 0.5
+    if runtime.scene == 1 then
+        movementMaxX = runtime.canvasWidth * 0.5 - halfCharacter - SCENE_TRANSITION_EDGE_GAP
+    elseif runtime.scene == 2 then
+        movementMinX = -runtime.canvasWidth * 0.5 + halfCharacter + SCENE_TRANSITION_EDGE_GAP
+    end
+    local nextX = math.max(movementMinX, math.min(movementMaxX, runtime.playerX + xDirection * step))
+    local nextY = math.max(minY, math.min(maxY, runtime.playerY + yDirection * step))
+    if not moveAcrossWalkableSurface(runtime, config,
+        nextX - runtime.playerX, nextY - runtime.playerY) then return end
     runtime.travelerRoot:SetAnchoredPosition(runtime.playerX, runtime.playerY)
 
     if runtime.scene == 1 then
@@ -100,13 +249,19 @@ function Movement.Update(runtime, config, dt, handlers)
             handlers.beginScene1Dialogue()
             return
         end
-        if runtime.scene1Triggered and normalizedX >= 0.985 then
+        if runtime.scene1Triggered and runtime.playerX >= movementMaxX then
             handlers.enterScene2()
             return
         end
-    elseif runtime.scene == 2 and not runtime.scene2Triggered then
-        local normalizedX = (runtime.playerX - minX) / (maxX - minX)
-        if normalizedX >= config.scene2DialogueX then handlers.beginScene2Dialogue() end
+    elseif runtime.scene == 2 then
+        if runtime.playerX <= movementMinX then
+            handlers.enterScene1()
+            return
+        end
+        if not runtime.scene2Triggered then
+            local normalizedX = (runtime.playerX - minX) / (maxX - minX)
+            if normalizedX >= config.scene2DialogueX then handlers.beginScene2Dialogue() end
+        end
     end
 end
 

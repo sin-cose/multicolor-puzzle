@@ -224,6 +224,13 @@ end
 
 local function getPuzzleChangeInterval(changeIndex)
     local puzzle = CONFIG.puzzle
+    local decelerationStart = puzzle.totalChanges - puzzle.decelerationChanges + 1
+    if changeIndex >= decelerationStart then
+        local decelerationIndex = changeIndex - decelerationStart + 1
+        local progress = (decelerationIndex - 1) / (puzzle.decelerationChanges - 1)
+        return puzzle.minIntervalSeconds
+            + (puzzle.startIntervalSeconds - puzzle.minIntervalSeconds) * progress ^ puzzle.accelerationPower
+    end
     if changeIndex > puzzle.accelerationChanges then return puzzle.minIntervalSeconds end
     local progress = (changeIndex - 1) / (puzzle.accelerationChanges - 1)
     return puzzle.minIntervalSeconds
@@ -233,16 +240,19 @@ end
 local function updatePuzzlePerformance(dt)
     if RUNTIME.scene ~= 3 then return end
     local phase = RUNTIME.puzzlePhase
-    if phase ~= "random" and phase ~= "pause" and phase ~= "fakeout" and phase ~= "target" then return end
+    if phase ~= "random" and phase ~= "decelerate" and phase ~= "pause" and phase ~= "fakeout" and phase ~= "target" then return end
 
     RUNTIME.puzzleTimer = RUNTIME.puzzleTimer + dt
-    if phase == "random" then
+    if phase == "random" or phase == "decelerate" then
         if RUNTIME.puzzleTimer >= getPuzzleChangeInterval(RUNTIME.puzzleChangeIndex) then
             RUNTIME.puzzleTimer = 0
             randomizePuzzleTiles()
             RUNTIME.puzzleChangeIndex = RUNTIME.puzzleChangeIndex + 1
             if RUNTIME.puzzleChangeIndex > CONFIG.puzzle.totalChanges then
                 RUNTIME.puzzlePhase = "pause"
+            elseif RUNTIME.puzzlePhase == "random"
+                and RUNTIME.puzzleChangeIndex > CONFIG.puzzle.totalChanges - CONFIG.puzzle.decelerationChanges then
+                RUNTIME.puzzlePhase = "decelerate"
             end
         end
     elseif phase == "pause" and RUNTIME.puzzleTimer >= CONFIG.puzzle.fakeoutPauseSeconds then
@@ -544,6 +554,22 @@ local function enterScene2()
     log("场景切换：scene1 -> scene2；旅行者已放置在场景2左侧")
 end
 
+local function returnToScene1()
+    RUNTIME.scene = 1
+    local halfCharacter = CONFIG.travelerRootSize * 0.5
+    local returnGapPixels = 24
+    RUNTIME.playerX = RUNTIME.canvasWidth * 0.5 - halfCharacter - returnGapPixels
+    RUNTIME.playerY = RUNTIME.canvasHeight * (0.5 - CONFIG.scene2.bridgeCenterYRatio)
+    RUNTIME.controls.background1:SetVisible(false)
+    RUNTIME.controls.background2:SetVisible(false)
+    SCENE.SetVisible(RUNTIME, false)
+    SCENE.SetScene1Visible(RUNTIME, true)
+    for _, tile in ipairs(RUNTIME.puzzleTiles) do tile:SetVisible(false) end
+    RUNTIME.travelerRoot:SetAnchoredPosition(RUNTIME.playerX, RUNTIME.playerY)
+    RUNTIME.scene2Triggered = false
+    log("场景切换：scene2 -> scene1；旅行者返回右侧窄平台")
+end
+
 local function beginScene2Dialogue()
     RUNTIME.scene2Triggered = true
     RUNTIME.keyHeld.left, RUNTIME.keyHeld.right = false, false
@@ -563,11 +589,8 @@ enterPuzzleScene = function()
     RUNTIME.puzzleRandomSeed = CONFIG.puzzle.randomSeed
     RUNTIME.keyHeld.left, RUNTIME.keyHeld.right = false, false
     RUNTIME.keyHeld.up, RUNTIME.keyHeld.down = false, false
-    RUNTIME.playerX = RUNTIME.puzzleBoardLeft - CONFIG.travelerRootSize * 0.5
-    RUNTIME.playerY = RUNTIME.puzzleBoardTop - RUNTIME.puzzleTileHeight * 3.5
-    RUNTIME.travelerRoot:SetAnchoredPosition(RUNTIME.playerX, RUNTIME.playerY)
     randomizePuzzleTiles()
-    log("场景2剧情结束，进入 S3；角色位于第4行第1格左侧并锁定移动")
+    log("场景2剧情结束，进入 S3；保留对话触发位置并锁定移动")
 end
 
 local function cleanup()
@@ -641,6 +664,7 @@ function OnUpdate(dt)
     MOVEMENT.Update(RUNTIME, CONFIG, dt, {
         beginScene1Dialogue = beginScene1Dialogue,
         enterScene2 = enterScene2,
+        enterScene1 = returnToScene1,
         beginScene2Dialogue = beginScene2Dialogue,
         puzzlePassed = function() startDialogue(STORY.puzzlePassed) end,
     })

@@ -23,6 +23,10 @@ local CONFIG = {
         boardTopRatio = 0.24,
         boardWidthRatio = 0.54,
         boardHeightRatio = 0.52,
+        mainLandLeftRatio = 0.27,
+        mainLandTopRatio = 0.20,
+        mainLandRightRatio = 0.96,
+        mainLandBottomRatio = 0.79,
     },
     puzzle = {
         rows = 6,
@@ -33,6 +37,7 @@ local CONFIG = {
             { r = 162, g = 164, b = 166 },
         },
         accelerationChanges = 19,
+        decelerationChanges = 19,
         totalChanges = 91,
         startIntervalSeconds = 0.42,
         minIntervalSeconds = 0.067,
